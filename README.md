@@ -6,6 +6,8 @@ Wireless DHCP IP Depletion Tester
 This C++ program, paired with an ESP32-C6, sets up a wireless access point you can join to run a DHCP-starvation test against a chosen SSID.
 Connect to the device’s Wi-Fi named “Sinkhole” with the passphrase 12345678 ( or scan the QR code with your phone).
 
+![Parts](https://github.com/keldnorman/dhcp-depleter/blob/main/images/qr.png?raw=true)
+
 After connecting, the config page should open automatically but if not then open http://10.13.37.1
 Press the button "Scan Wi-Fi" for nearby accesspoints/SSID's/wireless networks and select a target.
 
