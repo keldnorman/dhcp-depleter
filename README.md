@@ -1,12 +1,15 @@
 # dhcp-depleter
 Wireless DHCP IP Depletion Tester
 
-This little C++program + an esp32-c6 hardware will setup a Wireless accesspoint that you connect to and select what SSID (wireless accesspoint name) you want to test a DHCP starvation attack against. 
+This C++ program, paired with an ESP32-C6, sets up a wireless access point you can join to run a DHCP-starvation test against a chosen SSID.
+Connect to the device’s Wi-Fi named “Sinkhole” with the passphrase 12345678 ( or scan the QR code with your phone).
 
-You can setup and start the test by connected to the WiFi that the device will create called Sinkhole.
-The fastest way to connect to it is to scan the QR code or you could alternatively connect to it manually using the password 12345678.
+After connecting, the config page should open automatically but if not then open http://10.13.37.1
 
-When connected to the setup WiFi and visiting the webpage http://10.13.37.1 you can scan for surrounding WiFi's and select a target. If the SSID requires a WPA2/WPA3 passphrase you can supply it at the webpage.
+Press the button "Scan Wi-Fi" for nearby accesspoints/SSID's/wireless networks and select a target.
+If the wireless accesspoint requires a WPA2/WPA3 passphrase you can enter it on the webpage.
 
-Then just press "Test" to see if the esp32-c6 can connect and pull an IP address from the DHCP server.
-If it succeed you can start the test that will continue forever (or until it runs out of battery) to retrieve new IP addresses. 
+Then press “Test connection” to verify that the ESP32-C6 can connect and obtain an IP address via DHCP.
+If it succeeds, you can start the test by pressing "Start".
+
+The starvation attack will keep running forever requesting new IP addresses ( until turned off or the battery is depleted).
