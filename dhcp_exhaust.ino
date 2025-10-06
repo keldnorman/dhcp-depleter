@@ -2,15 +2,15 @@
  *---------------------------------------------------------------------------------------------------
  * Info 
  *--------------------------------------------------------------------------------------------------- 
- *  Proof-of-concept code to demonstrate DHCP-starvation mechanics on Wi-Fi networks using an ESP32
+ *  Proof-of-concept code to demonstrates DHCP-starvation mechanics on Wi-Fi networks using an esp32
  *  
- *  This script will start up a WiFi called "Sinkhole" with the passphrase of 12345678 that you can
+ *  This script will start up a WiFi caled "Sinkhole" with the passphrase of 12345678 that you can
  *  connect to and configure the test. 
  *  
- *  When the test starts the Wi-Fi will shut down and the program will continue to run until the 
+ *  When the test starts the wifi will shut down and the program will continue to run untill the 
  *  battery runs dry or the unit is turned off.
  *  
- *  (C)opyleft Keld Norman, Oct. 2025.
+ *  (C)opyleft Keld Norman, Okt 2025.
  *---------------------------------------------------------------------------------------------------
  * Disclaimer
  *--------------------------------------------------------------------------------------------------- 
@@ -20,23 +20,23 @@
  * ---------------------------------------------------------------------------------------------------
  * Hardware:
  * ---------------------------------------------------------------------------------------------------
- * This code is written for an ESP32-C6 bought on https://www.aliexpress.com with an external antenna
- * for around 16$ including shipping -> https://www.aliexpress.com/item/1005006935181127.html
+ * This code is written for an esp32c6 bought on https://www.aliexpress.com with an external antenna
+ * for around 16$ including shipment -> https://www.aliexpress.com/item/1005006935181127.html
  * 
  * ---------------------------------------------------------------------------------------------------
- * How to set up the Arduino framework:
+ * How to setup the Arduino framework:
  * ---------------------------------------------------------------------------------------------------
- *  In Arduino select file -> Preferences -> Additional Boards Manager URLs ->
+ *  In Arduino select file -> Preferences -> Additional Boards Manager URL's ->
  *  
  *  Add this URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
  * 
- *  Then go to the Tools menu → Boards Manager → search for esp32
- *   → Install esp32 by Espressif Systems (when I did this it was version 3.3.1)
+ * Then go to tools menu -> find the Boards Manager -> Search here for esp32
+ *  Install the esp32 by Espressif Systems ( when i did this it was in version 3.3.1 )
  *  
- * Now select the board by again starting in the Tools menu
- *  → Boards submenu 
- *   → ESP32 Arduino
- *    → select ESP32-C6 Dev Module
+ * Now select the board by again starting at the Tools menu 
+ *  -> find the Boards sub menu 
+ *   -> select ESP32 Arduino menu 
+ *    -> Select the ESP32C6 Dev module
  * ---------------------------------------------------------------------------------------------------
 */
 //----------------------------------------------------------------------------------------------------
@@ -76,6 +76,8 @@ static const uint32_t MIN_PAUSE_MS = 500;
 static const char*   DEF_AP_SSID = "Sinkhole";
 static const char*   DEF_AP_PASS = "12345678";
 static const uint8_t CFG_AP_CHAN = 1;
+static const int ANT_PWR_GPIO = 3;
+static const int ANT_SEL_GPIO = 14;
 static const IPAddress AP_IP(10,13,37,1);
 static const IPAddress AP_GW(10,13,37,1);
 static const IPAddress AP_MASK(255,255,255,0);
@@ -91,6 +93,7 @@ static uint64_t g_custom_seq = 1;
 static bool   g_config_locked = false;
 static String g_ap_ssid;
 static String g_ap_pass;
+static bool   g_ext_ant = false;     // NEW: external antenna setting (persisted). Default OFF.
 static esp_pm_lock_handle_t g_no_ls_lock = nullptr;
 static uint32_t g_cycle = 0;
 static const int BOOT_HOLD_GPIO = 9;
@@ -138,9 +141,9 @@ static void set_country(const String& cc){
   s.toUpperCase();
   c.cc[0]=s[0]; c.cc[1]=s[1]; c.cc[2]=0;
   c.schan = 1;
-  if(s=="JP")       c.nchan = 14;   // Japan: 1–14
-  else if(s=="US"||s=="CA"||s=="TW") c.nchan = 11;  // 1–11
-  else              c.nchan = 13;   // 1–13 (EU m.fl.)
+  if(s=="JP")       c.nchan = 14;
+  else if(s=="US"||s=="CA"||s=="TW") c.nchan = 11;
+  else              c.nchan = 13;
   c.max_tx_power = 20;
   c.policy = WIFI_COUNTRY_POLICY_AUTO;
   esp_wifi_set_country(&c);
@@ -158,6 +161,18 @@ static bool is_own_network(const String& ssid, const String& bssid_opt){
   String apm = current_ap_mac();
   if(apm.length() && bssid_opt.length() && bssid_opt.equalsIgnoreCase(apm)) return true;
   return false;
+}
+//----------------------------------------------------------------------------------------------------
+// Antenna control
+//----------------------------------------------------------------------------------------------------
+static void apply_antenna(){
+  if(g_ext_ant){
+    pinMode(3, OUTPUT); digitalWrite(3, LOW);
+    pinMode(14, OUTPUT); digitalWrite(14, HIGH);
+  }else{
+    pinMode(14, INPUT);
+    pinMode(3, INPUT);
+  }
 }
 //----------------------------------------------------------------------------------------------------
 // Hostname generation
@@ -249,6 +264,7 @@ static void load_prefs(){
   g_custom_base = prefs.getString("base", g_custom_base);
   g_ap_ssid     = prefs.getString("ap_ssid", "");
   g_ap_pass     = prefs.getString("ap_pass", "");
+  g_ext_ant     = prefs.getBool("ext_ant", false);   // NEW
   String seqStr = prefs.getString("seq", "");
   if(seqStr.length()){
     unsigned long long tmp=strtoull(seqStr.c_str(),nullptr,10);
@@ -269,6 +285,7 @@ static void save_all_prefs(bool common, bool settings){
     prefs.putString("base", g_custom_base);
     prefs.putString("ap_ssid", g_ap_ssid);
     prefs.putString("ap_pass", g_ap_pass);
+    prefs.putBool("ext_ant", g_ext_ant);           // NEW
   }
   prefs.end();
 }
@@ -424,7 +441,7 @@ static String html_form(){
       "<label id='label_pass'>Passphrase</label>"
       "<div id='manualPassWrap' class='pwwrap'>"
         "<input type='password' name='wifi_pass' id='wifi_pass' minlength='8' maxlength='63' inputmode='text' autocapitalize='none' autocorrect='off' spellcheck='false' autocomplete='new-password' aria-autocomplete='none' enterkeyhint='go' placeholder='Password' value='" + g_wifi_pass + "'>"
-        "<span id='eye' class='eye' aria-label='Toggle password'>👁</span>"
+        "<span id='eye' class='eye' aria-label='toggle password'>👁</span>"
       "</div>"
       "<label>Security</label><select name='wpa' id='wpa'>" + wpaOpts + "</select>"
     "</div>"
@@ -475,7 +492,7 @@ static String html_form(){
         "+\"</div></div>\";"
       "}"
       "scanList.innerHTML=html||\"<div class='item'><div class='ssid'>No networks found</div></div>\";"
-      "scanList.classList.remove('hidden'); scanStatus.textContent='Tap a row or press Pick';"
+      "scanList.classList.remove('hidden'); scanStatus.textContent='Tap a row or Pick';"
       "scanList.onclick=function(ev){"
         "const el=ev.target.closest('[data-ssid]'); if(!el) return;"
         "const ss=decodeURIComponent(el.dataset.ssid||''); const a=el.dataset.auth||'WPA2'; const bs=el.dataset.bssid||'';"
@@ -544,150 +561,136 @@ static String html_about(){
   "</div></div></body></html>";
 }
 //----------------------------------------------------------------------------------------------------
-// HTML: SETTINGS  (native Country select, baseWrap toggle fix, Save fix)
+// Settings page HTML (static PROGMEM used by /settings)
 //----------------------------------------------------------------------------------------------------
-static String html_settings(){
-  String apS = g_ap_ssid.length()?g_ap_ssid:String(DEF_AP_SSID);
-  String apP = g_ap_pass.length()?g_ap_pass:String(DEF_AP_PASS);
-  String ccVal = (g_country.length()==2 ? g_country : String("DK")); ccVal.toUpperCase();
-  String baseEsc = esc(g_custom_base);
-  static const char* THEME_LIST[]={"IT","FOOD","GAMES","SPACE","FUNNY","MUSIC","NATURE","ANIMALS","CUSTOM"};
-  String themeOpts; themeOpts.reserve(180);
-  for(size_t i=0;i<sizeof(THEME_LIST)/sizeof(THEME_LIST[0]);++i){
-    const char* n = THEME_LIST[i];
-    themeOpts += "<option value='"; themeOpts += n; themeOpts += "'";
-    if(g_theme.equalsIgnoreCase(n)) themeOpts += " selected";
-    themeOpts += ">"; themeOpts += n; themeOpts += "</option>";
-  }
-  static const char* CC_CODES[] = {"DK","SE","NO","DE","NL","UK","JP"};
-  static const char* CC_LABELS[] = {"DK (Denmark)","SE (Sweden)","NO (Norway)","DE (Germany)","NL (Netherlands)","UK (England)","JP (Japan)"};
-  String ccOpts; ccOpts.reserve(256);
-  const size_t N = sizeof(CC_CODES)/sizeof(CC_CODES[0]);
-  for(size_t i=0; i<N; ++i){
-    ccOpts += "<option value='"; ccOpts += CC_CODES[i]; ccOpts += "'";
-    if(ccVal.equalsIgnoreCase(CC_CODES[i])) ccOpts += " selected";
-    ccOpts += ">"; ccOpts += CC_LABELS[i]; ccOpts += "</option>";
-  }
-  String h; h.reserve(9000);
-  h += "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-       "<meta name='format-detection' content='telephone=no'>"
-       "<meta http-equiv='Cache-Control' content='no-store, no-cache, must-revalidate, max-age=0'>"
-       "<meta http-equiv='Pragma' content='no-cache'><meta http-equiv='Expires' content='0'>"
-       "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>"
-       "<title>Settings</title>"
-       "<style>"
-       ":root{--bg:#0b0b0b;--fg:#eaeaea;--mut:#a6a6a6;--accent:#ffd400;--border:#1f1f1f;--radius:16px}"
-       "html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);overflow:hidden}"
-       "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}"
-       ".wrap{max-width:740px;margin:0 auto;height:100dvh;display:block;padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom));overflow:auto;-webkit-overflow-scrolling:touch}"
-       ".topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);z-index:1001}"
-       ".topbar .inner{position:relative;padding:14px 6px;display:flex;align-items:center;justify-content:center}"
-       ".title{margin:0;color:var(--accent);font-weight:800;font-size:clamp(22px,6vw,30px)}"
-       ".dl{position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:26px;text-decoration:none;color:var(--fg)}"
-       ".about{position:absolute;left:0;top:50%;transform:translateY(-50%);font-size:26px;text-decoration:none;color:var(--fg)}"
-       "label{display:block;margin:10px 0 6px;font-size:17px;font-weight:600}"
-       ".hidden{display:none}"
-       "input[type=text],input[type=password],select,button{appearance:none;background:#111;color:var(--fg);border:1px solid #2a2a2a;border-radius:var(--radius);padding:14px 16px;font-size:18px;width:100%;box-sizing:border-box}"
-       "select, select option{white-space:nowrap}"
-       "#cc{min-width:28ch}"
-       "input.pf-invalid,select.pf-invalid{background:#2a1515;border-color:#8a4040}"
-       ".pwwrap{position:relative;display:block}"
-       ".pwwrap input{display:block;width:100%;padding-right:46px}"
-       ".eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:20px;cursor:pointer;user-select:none}"
-       ".row{display:grid;grid-template-columns:1fr;gap:12px}"
-       ".bar{display:flex;gap:12px;margin:16px 0 0;flex-wrap:nowrap;justify-content:flex-end}"
-       ".bar>*{flex:1;min-width:0;white-space:nowrap}"
-       ".btnlike{display:inline-block;text-align:center;border:1px solid #3a3a3a;border-radius:var(--radius);padding:14px 16px;text-decoration:none;color:var(--fg);font-size:18px}"
-       ".small{font-size:14px;color:var(--mut)}"
-       ".modal{position:fixed;inset:0;width:100vw;height:100dvh;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:9999}"
-       ".modal .card{background:#111;border:1px solid #2a2a2a;border-radius:var(--radius);padding:18px;max-width:640px;margin:0 16px;text-align:center}"
-       ".modal .card h1{margin:0 0 8px 0;font-size:24px}"
-       ".rowcenter{display:flex;gap:12px;justify-content:center;margin-top:12px}"
-       "</style></head><body><div class='wrap'>"
-       "<div class='topbar'><div class='inner'>"
-       "<a href='#' id='btnAboutTop' class='about' aria-label='About'>ℹ️</a>"
-       "<h2 class='title'>Settings</h2>"
-       "<a href='/download' id='btnDownloadTop' class='dl' aria-label='Download'>⬇️</a>"
-       "</div></div>"
-       "<div class='row'>"
-       "<label>Initial AP SSID (on boot)</label>"
-       "<input type='text' id='ap_ssid' minlength='1' maxlength='32' autocapitalize='none' value='";
-  h += apS;
-  h += "'>"
-       "<label>Initial AP Passphrase</label>"
-       "<div class='pwwrap'><input type='password' id='ap_pass' minlength='8' maxlength='63' autocomplete='new-password' value='";
-  h += apP;
-  h += "'><span id='eye2' class='eye' aria-label='Toggle AP passphrase'>👁</span></div>"
-       "<label>Country (for correct Wi-Fi regulation settings)</label>"
-       "<select id='cc'>";
-  h += ccOpts;
-  h += "</select>"
-       "<label>Hostname theme (for random hostnames)</label>"
-       "<select id='theme'>";
-  h += themeOpts;
-  h += "</select>"
-       "<div id='baseWrap' class='";
-  h += (g_theme.equalsIgnoreCase("CUSTOM")?"":"hidden");
-  h += "'>"
-       "<label>Custom prefix hostnames</label>"
-       "<input type='text' id='hn_base' inputmode='text' autocapitalize='none' autocorrect='off' spellcheck='false' placeholder='3–10 chars [A-Za-z0-9-_]' minlength='3' maxlength='10' value='";
-  h += baseEsc;
-  h += "'>"
-       "</div>"
-       "<div class='bar'><button type='button' id='btnSave'>Save</button><a href='/' id='btnBack' class='btnlike'>Back</a></div>"
-       "<div class='small' id='saveMsg'></div>"
-       "</div>"
-       "<div id='aboutModal' class='modal'>"
-       "<div class='card'>"
-       "<h1>About</h1>"
-       "<p>(C)opyleft Keld Norman, Oct. 2025</p>"
-       "<div class='rowcenter'><button type='button' id='abtClose'>Close</button></div>"
-       "</div>"
-       "</div>"
-       "<script>'use strict';"
-       "function normBase(v){return(v||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,10);} "
-       "const themeSel=document.getElementById('theme');"
-       "const baseWrap=document.getElementById('baseWrap');"
-       "const baseInput=document.getElementById('hn_base');"
-       "const apSSID=document.getElementById('ap_ssid');"
-       "const apPASS=document.getElementById('ap_pass');"
-       "const eye2=document.getElementById('eye2');"
-       "const saveMsg=document.getElementById('saveMsg');"
-       "const ccSel=document.getElementById('cc');"
-       "let apPassVisible=false;"
-       "function validBase(){ if(!baseInput||themeSel.value!=='CUSTOM') return true; const v=baseInput.value.trim(); return v.length>=3&&v.length<=10&&/^[A-Za-z0-9_-]+$/.test(v); }"
-       "function paintBaseValidity(){ if(!baseInput) return; baseInput.classList.remove('pf-invalid'); if(themeSel.value==='CUSTOM'&&!validBase()) baseInput.classList.add('pf-invalid'); }"
-       "function toggleBaseByTheme(){ const isCustom=(themeSel&&themeSel.value==='CUSTOM'); if(baseWrap){ baseWrap.classList.toggle('hidden',!isCustom); if(isCustom&&baseInput){ baseInput.value=normBase(baseInput.value); paintBaseValidity(); } } }"
-       "if(eye2){eye2.addEventListener('click',()=>{apPassVisible=!apPassVisible;apPASS.setAttribute('type',apPassVisible?'text':'password');eye2.textContent=apPassVisible?'🙈':'👁';apPASS.focus();});}"
-       "themeSel.addEventListener('change',()=>{ toggleBaseByTheme(); paintBaseValidity(); });"
-       "if(baseInput){baseInput.addEventListener('input',()=>{const p=baseInput.selectionStart;baseInput.value=normBase(baseInput.value);if(p!=null) baseInput.setSelectionRange(p,p);paintBaseValidity();});}"
-       "document.getElementById('btnSave').addEventListener('click',async()=>{"
-       " if(themeSel.value==='CUSTOM'&&!validBase()){paintBaseValidity(); if(baseInput) baseInput.focus(); return;}"
-       " saveMsg.textContent='Saving…';"
-       " const payload=new URLSearchParams();"
-       " payload.set('cc',ccSel.value.toUpperCase());"
-       " payload.set('theme',themeSel.value);"
-       " if(baseInput) payload.set('base',baseInput.value);"
-       " payload.set('ap_ssid',apSSID.value);"
-       " payload.set('ap_pass',apPASS.value);"
-       " try{const r=await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:payload.toString()});"
-       "     if(!r.ok) throw 0; saveMsg.textContent='Saved.';}catch(e){saveMsg.textContent='Save failed';}"
-       "});"
-       "document.getElementById('btnBack').addEventListener('click',function(ev){ev.preventDefault();location.replace('/');});"
-       "toggleBaseByTheme();"
-       "const abBtn=document.getElementById('btnAboutTop');"
-       "const abModal=document.getElementById('aboutModal');"
-       "const abClose=document.getElementById('abtClose');"
-       "abBtn.addEventListener('click',e=>{e.preventDefault();abModal.style.display='flex';});"
-       "abClose.addEventListener('click',()=>{abModal.style.display='none';});"
-       "abModal.addEventListener('click',e=>{if(e.target===abModal) abModal.style.display='none';});"
-       "document.addEventListener('keydown',e=>{if(e.key==='Escape') abModal.style.display='none';});"
-       "</script>"
-       "</div></body></html>";
-  return h;
-}
+static const char SETTINGS_HTML[] PROGMEM = R"HTML(<!DOCTYPE html><html><head><meta charset='utf-8'>
+<meta name='format-detection' content='telephone=no'>
+<meta http-equiv='Cache-Control' content='no-store, no-cache, must-revalidate, max-age=0'>
+<meta http-equiv='Pragma' content='no-cache'><meta http-equiv='Expires' content='0'>
+<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>
+<title>Settings</title>
+<style>
+:root{--bg:#0b0b0b;--fg:#eaeaea;--mut:#a6a6a6;--accent:#ffd400;--border:#1f1f1f;--radius:16px}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);overflow:hidden}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+.wrap{max-width:740px;margin:0 auto;height:100dvh;display:block;padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom));overflow:auto;-webkit-overflow-scrolling:touch}
+.topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);z-index:1001}
+.topbar .inner{position:relative;padding:14px 6px;display:flex;align-items:center;justify-content:center}
+.title{margin:0;color:var(--accent);font-weight:800;font-size:clamp(22px,6vw,30px)}
+.dl{position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:26px;text-decoration:none;color:var(--fg)}
+.about{position:absolute;left:0;top:50%;transform:translateY(-50%);font-size:26px;text-decoration:none;color:var(--fg)}
+label{display:block;margin:10px 0 6px;font-size:17px;font-weight:600}
+.hidden{display:none}
+input[type=text],input[type=password],select,button{appearance:none;background:#111;color:var(--fg);border:1px solid #2a2a2a;border-radius:var(--radius);padding:14px 16px;font-size:18px;width:100%;box-sizing:border-box}
+select,select option{white-space:nowrap}
+#cc{min-width:28ch}
+input.pf-invalid,select.pf-invalid{background:#2a1515;border-color:#8a4040}
+.pwwrap{position:relative;display:block}
+.pwwrap input{display:block;width:100%;padding-right:46px}
+.eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:20px;cursor:pointer;user-select:none}
+.row{display:grid;grid-template-columns:1fr;gap:12px}
+.bar{display:flex;gap:12px;margin:16px 0 0;flex-wrap:nowrap;justify-content:flex-end}
+.bar>*{flex:1;min-width:0;white-space:nowrap}
+.btnlike{display:inline-block;text-align:center;border:1px solid #3a3a3a;border-radius:var(--radius);padding:14px 16px;text-decoration:none;color:var(--fg);font-size:18px}
+.small{font-size:14px;color:var(--mut)}
+.modal{position:fixed;inset:0;width:100vw;height:100dvh;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal .card{background:#111;border:1px solid #2a2a2a;border-radius:var(--radius);padding:18px;max-width:640px;margin:0 16px;text-align:center}
+.modal .card h1{margin:0 0 8px 0;font-size:24px}
+.rowcenter{display:flex;gap:12px;justify-content:center;margin-top:12px}
+.toggle{display:flex;align-items:center;gap:10px}
+</style></head><body><div class='wrap'>
+<div class='topbar'><div class='inner'>
+<a href='#' id='btnAboutTop' class='about' aria-label='About'>ℹ️</a>
+<h2 class='title'>Settings</h2>
+<a href='/download' id='btnDownloadTop' class='dl' aria-label='Download'>⬇️</a>
+</div></div>
+<div class='row'>
+<label>Initial AP SSID (on boot)</label>
+<input type='text' id='ap_ssid' minlength='1' maxlength='32' autocapitalize='none' value=''>
+<label>Initial AP Passphrase</label>
+<div class='pwwrap'><input type='password' id='ap_pass' minlength='8' maxlength='63' autocomplete='new-password' value=''><span id='eye2' class='eye' aria-label='toggle ap pass'>👁</span></div>
+<label>Country (For correct WiFi Regulation settings)</label>
+<select id='cc'>
+<option value='DK'>DK (Denmark)</option>
+<option value='SE'>SE (Sweden)</option>
+<option value='NO'>NO (Norway)</option>
+<option value='DE'>DE (Germany)</option>
+<option value='NL'>NL (Netherlands)</option>
+<option value='UK'>UK (England)</option>
+<option value='JP'>JP (Japan)</option>
+</select>
+<label>External antenna</label>
+<div class='toggle'><input type='checkbox' id='ant_ext'><span>Use external antenna</span></div>
+<label>Hostname theme (For random hostnames)</label>
+<select id='theme'>
+<option>IT</option><option>FOOD</option><option>GAMES</option><option>SPACE</option>
+<option>FUNNY</option><option>MUSIC</option><option>NATURE</option><option>ANIMALS</option><option>CUSTOM</option>
+</select>
+<div id='baseWrap' class='hidden'>
+<label>Custom prefix hostnames</label>
+<input type='text' id='hn_base' inputmode='text' autocapitalize='none' autocorrect='off' spellcheck='false' placeholder='3–10 chars [A-Za-z0-9-_]' minlength='3' maxlength='10' value=''>
+</div>
+<div class='bar'><button type='button' id='btnSave'>Save</button><a href='/' id='btnBack' class='btnlike'>Back</a></div>
+<div class='small' id='saveMsg'></div>
+</div>
+<div id='aboutModal' class='modal'><div class='card'><h1>About</h1><p>(C)opyleft Keld Norman, Oct. 2025</p><div class='rowcenter'><button type='button' id='abtClose'>Close</button></div></div></div>
+<script>
+'use strict';
+function normBase(v){return(v||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,10);}
+const themeSel=document.getElementById('theme');
+const baseWrap=document.getElementById('baseWrap');
+const baseInput=document.getElementById('hn_base');
+const apSSID=document.getElementById('ap_ssid');
+const apPASS=document.getElementById('ap_pass');
+const eye2=document.getElementById('eye2');
+const saveMsg=document.getElementById('saveMsg');
+const ccSel=document.getElementById('cc');
+const antExt=document.getElementById('ant_ext');
+let apPassVisible=false;
+function validBase(){ if(!baseInput||themeSel.value!=='CUSTOM') return true; const v=baseInput.value.trim(); return v.length>=3&&v.length<=10&&/^[A-Za-z0-9_-]+$/.test(v); }
+function paintBaseValidity(){ if(!baseInput) return; baseInput.classList.remove('pf-invalid'); if(themeSel.value==='CUSTOM'&&!validBase()) baseInput.classList.add('pf-invalid'); }
+function toggleBaseByTheme(){ const isCustom=(themeSel&&themeSel.value==='CUSTOM'); if(baseWrap){ baseWrap.classList.toggle('hidden',!isCustom); if(isCustom&&baseInput){ baseInput.value=normBase(baseInput.value); paintBaseValidity(); } } }
+if(eye2){eye2.addEventListener('click',()=>{apPassVisible=!apPassVisible;apPASS.setAttribute('type',apPassVisible?'text':'password');eye2.textContent=apPassVisible?'🙈':'👁';apPASS.focus();});}
+themeSel.addEventListener('change',()=>{ toggleBaseByTheme(); paintBaseValidity(); });
+if(baseInput){baseInput.addEventListener('input',()=>{const p=baseInput.selectionStart;baseInput.value=normBase(baseInput.value);if(p!=null) baseInput.setSelectionRange(p,p);paintBaseValidity();});}
+document.getElementById('btnSave').addEventListener('click',async()=>{
+ if(themeSel.value==='CUSTOM'&&!validBase()){paintBaseValidity(); if(baseInput) baseInput.focus(); return;}
+ saveMsg.textContent='Saving…';
+ const payload=new URLSearchParams();
+ payload.set('cc',ccSel.value.toUpperCase());
+ payload.set('theme',themeSel.value);
+ if(baseInput) payload.set('base',baseInput.value);
+ payload.set('ap_ssid',apSSID.value);
+ payload.set('ap_pass',apPASS.value);
+ payload.set('ant_ext', (antExt && antExt.checked) ? '1' : '0');
+ try{const r=await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:payload.toString()}); if(!r.ok) throw 0; saveMsg.textContent='Saved.';}catch(e){saveMsg.textContent='Save failed';}
+});
+document.getElementById('btnBack').addEventListener('click',function(ev){ev.preventDefault();location.replace('/');});
+const abBtn=document.getElementById('btnAboutTop');
+const abModal=document.getElementById('aboutModal');
+const abClose=document.getElementById('abtClose');
+abBtn.addEventListener('click',e=>{e.preventDefault();abModal.style.display='flex';});
+abClose.addEventListener('click',()=>{abModal.style.display='none';});
+abModal.addEventListener('click',e=>{if(e.target===abModal) abModal.style.display='none';});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') abModal.style.display='none';});
+(async()=>{
+ try{
+  const r=await fetch('/settings.json',{cache:'no-store'});
+  const j=await r.json();
+  apSSID.value=j.ap_ssid||'';
+  apPASS.value=j.ap_pass||'';
+  ccSel.value=(j.cc||'DK').toUpperCase();
+  themeSel.value=j.theme||'ANIMALS';
+  if(baseInput) baseInput.value=j.base||'';
+  if(antExt) antExt.checked=!!j.ant_ext;
+  toggleBaseByTheme(); paintBaseValidity();
+ }catch(e){}
+})();
+</script>
+</div></body></html>)HTML";
+static const size_t SETTINGS_HTML_LEN = sizeof(SETTINGS_HTML) - 1;
 //----------------------------------------------------------------------------------------------------
-// URL decode + fallback form parsing helpers (for /save_settings)
+// URL decode + fallback form parsing helpers (for /save_settings)  // <— ADD
 //----------------------------------------------------------------------------------------------------
 static inline int _hexv(char c){
   if(c>='0'&&c<='9') return c-'0';
@@ -737,133 +740,10 @@ static String json_escape(const String& s){
   return o;
 }
 //----------------------------------------------------------------------------------------------------
-// Settings page #1
-//----------------------------------------------------------------------------------------------------
-static const char SETTINGS_HTML[] PROGMEM = R"HTML(<!DOCTYPE html><html><head><meta charset='utf-8'>
-<meta name='format-detection' content='telephone=no'>
-<meta http-equiv='Cache-Control' content='no-store, no-cache, must-revalidate, max-age=0'>
-<meta http-equiv='Pragma' content='no-cache'><meta http-equiv='Expires' content='0'>
-<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>
-<title>Settings</title>
-<style>
-:root{--bg:#0b0b0b;--fg:#eaeaea;--mut:#a6a6a6;--accent:#ffd400;--border:#1f1f1f;--radius:16px}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);overflow:hidden}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
-.wrap{max-width:740px;margin:0 auto;height:100dvh;display:block;padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom));overflow:auto;-webkit-overflow-scrolling:touch}
-.topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);z-index:1001}
-.topbar .inner{position:relative;padding:14px 6px;display:flex;align-items:center;justify-content:center}
-.title{margin:0;color:var(--accent);font-weight:800;font-size:clamp(22px,6vw,30px)}
-.dl{position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:26px;text-decoration:none;color:var(--fg)}
-.about{position:absolute;left:0;top:50%;transform:translateY(-50%);font-size:26px;text-decoration:none;color:var(--fg)}
-label{display:block;margin:10px 0 6px;font-size:17px;font-weight:600}
-.hidden{display:none}
-input[type=text],input[type=password],select,button{appearance:none;background:#111;color:var(--fg);border:1px solid #2a2a2a;border-radius:var(--radius);padding:14px 16px;font-size:18px;width:100%;box-sizing:border-box}
-select,select option{white-space:nowrap}
-#cc{min-width:28ch}
-input.pf-invalid,select.pf-invalid{background:#2a1515;border-color:#8a4040}
-.pwwrap{position:relative;display:block}
-.pwwrap input{display:block;width:100%;padding-right:46px}
-.eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:20px;cursor:pointer;user-select:none}
-.row{display:grid;grid-template-columns:1fr;gap:12px}
-.bar{display:flex;gap:12px;margin:16px 0 0;flex-wrap:nowrap;justify-content:flex-end}
-.bar>*{flex:1;min-width:0;white-space:nowrap}
-.btnlike{display:inline-block;text-align:center;border:1px solid #3a3a3a;border-radius:var(--radius);padding:14px 16px;text-decoration:none;color:var(--fg);font-size:18px}
-.small{font-size:14px;color:var(--mut)}
-.modal{position:fixed;inset:0;width:100vw;height:100dvh;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:9999}
-.modal .card{background:#111;border:1px solid #2a2a2a;border-radius:var(--radius);padding:18px;max-width:640px;margin:0 16px;text-align:center}
-.modal .card h1{margin:0 0 8px 0;font-size:24px}
-.rowcenter{display:flex;gap:12px;justify-content:center;margin-top:12px}
-</style></head><body><div class='wrap'>
-<div class='topbar'><div class='inner'>
-<a href='#' id='btnAboutTop' class='about' aria-label='About'>ℹ️</a>
-<h2 class='title'>Settings</h2>
-<a href='/download' id='btnDownloadTop' class='dl' aria-label='Download'>⬇️</a>
-</div></div>
-<div class='row'>
-<label>Initial AP SSID (on boot)</label>
-<input type='text' id='ap_ssid' minlength='1' maxlength='32' autocapitalize='none' value=''>
-<label>Initial AP Passphrase</label>
-<div class='pwwrap'><input type='password' id='ap_pass' minlength='8' maxlength='63' autocomplete='new-password' value=''><span id='eye2' class='eye' aria-label='toggle ap pass'>👁</span></div>
-<label>Country (For correct WiFi Regulation settings)</label>
-<select id='cc'>
-<option value='DK'>DK (Denmark)</option>
-<option value='SE'>SE (Sweden)</option>
-<option value='NO'>NO (Norway)</option>
-<option value='DE'>DE (Germany)</option>
-<option value='NL'>NL (Netherlands)</option>
-<option value='UK'>UK (England)</option>
-<option value='JP'>JP (Japan)</option>
-</select>
-<label>Hostname theme (for random hostnames)</label>
-<select id='theme'>
-<option>IT</option><option>FOOD</option><option>GAMES</option><option>SPACE</option>
-<option>FUNNY</option><option>MUSIC</option><option>NATURE</option><option>ANIMALS</option><option>CUSTOM</option>
-</select>
-<div id='baseWrap' class='hidden'>
-<label>Custom prefix hostnames</label>
-<input type='text' id='hn_base' inputmode='text' autocapitalize='none' autocorrect='off' spellcheck='false' placeholder='3–10 chars [A-Za-z0-9-_]' minlength='3' maxlength='10' value=''>
-</div>
-<div class='bar'><button type='button' id='btnSave'>Save</button><a href='/' id='btnBack' class='btnlike'>Back</a></div>
-<div class='small' id='saveMsg'></div>
-</div>
-<div id='aboutModal' class='modal'><div class='card'><h1>About</h1><p>(C)opyleft Keld Norman, Oct. 2025</p><div class='rowcenter'><button type='button' id='abtClose'>Close</button></div></div></div>
-<script>
-'use strict';
-function normBase(v){return(v||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,10);}
-const themeSel=document.getElementById('theme');
-const baseWrap=document.getElementById('baseWrap');
-const baseInput=document.getElementById('hn_base');
-const apSSID=document.getElementById('ap_ssid');
-const apPASS=document.getElementById('ap_pass');
-const eye2=document.getElementById('eye2');
-const saveMsg=document.getElementById('saveMsg');
-const ccSel=document.getElementById('cc');
-let apPassVisible=false;
-function validBase(){ if(!baseInput||themeSel.value!=='CUSTOM') return true; const v=baseInput.value.trim(); return v.length>=3&&v.length<=10&&/^[A-Za-z0-9_-]+$/.test(v); }
-function paintBaseValidity(){ if(!baseInput) return; baseInput.classList.remove('pf-invalid'); if(themeSel.value==='CUSTOM'&&!validBase()) baseInput.classList.add('pf-invalid'); }
-function toggleBaseByTheme(){ const isCustom=(themeSel&&themeSel.value==='CUSTOM'); if(baseWrap){ baseWrap.classList.toggle('hidden',!isCustom); if(isCustom&&baseInput){ baseInput.value=normBase(baseInput.value); paintBaseValidity(); } } }
-if(eye2){eye2.addEventListener('click',()=>{apPassVisible=!apPassVisible;apPASS.setAttribute('type',apPassVisible?'text':'password');eye2.textContent=apPassVisible?'🙈':'👁';apPASS.focus();});}
-themeSel.addEventListener('change',()=>{ toggleBaseByTheme(); paintBaseValidity(); });
-if(baseInput){baseInput.addEventListener('input',()=>{const p=baseInput.selectionStart;baseInput.value=normBase(baseInput.value);if(p!=null) baseInput.setSelectionRange(p,p);paintBaseValidity();});}
-document.getElementById('btnSave').addEventListener('click',async()=>{
- if(themeSel.value==='CUSTOM'&&!validBase()){paintBaseValidity(); if(baseInput) baseInput.focus(); return;}
- saveMsg.textContent='Saving…';
- const payload=new URLSearchParams();
- payload.set('cc',ccSel.value.toUpperCase());
- payload.set('theme',themeSel.value);
- if(baseInput) payload.set('base',baseInput.value);
- payload.set('ap_ssid',apSSID.value);
- payload.set('ap_pass',apPASS.value);
- try{const r=await fetch('/save_settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:payload.toString()}); if(!r.ok) throw 0; saveMsg.textContent='Saved.';}catch(e){saveMsg.textContent='Save failed';}
-});
-document.getElementById('btnBack').addEventListener('click',function(ev){ev.preventDefault();location.replace('/');});
-const abBtn=document.getElementById('btnAboutTop');
-const abModal=document.getElementById('aboutModal');
-const abClose=document.getElementById('abtClose');
-abBtn.addEventListener('click',e=>{e.preventDefault();abModal.style.display='flex';});
-abClose.addEventListener('click',()=>{abModal.style.display='none';});
-abModal.addEventListener('click',e=>{if(e.target===abModal) abModal.style.display='none';});
-document.addEventListener('keydown',e=>{if(e.key==='Escape') abModal.style.display='none';});
-(async()=>{
- try{
-  const r=await fetch('/settings.json',{cache:'no-store'});
-  const j=await r.json();
-  apSSID.value=j.ap_ssid||'';
-  apPASS.value=j.ap_pass||'';
-  ccSel.value=(j.cc||'DK').toUpperCase();
-  themeSel.value=j.theme||'ANIMALS';
-  if(baseInput) baseInput.value=j.base||'';
-  toggleBaseByTheme(); paintBaseValidity();
- }catch(e){}
-})();
-</script>
-</div></body></html>)HTML";
-static const size_t SETTINGS_HTML_LEN = sizeof(SETTINGS_HTML) - 1;
-//----------------------------------------------------------------------------------------------------
-// Settings page
+// Settings page handler
 //----------------------------------------------------------------------------------------------------
 static void handle_settings(){
-  static const char* ETAG = "\"settings-v1\"";
+  static const char* ETAG = "\"settings-v1-ant-pos2\"";
   for (uint8_t i = 0; i < server.headers(); ++i) {
     if (server.headerName(i).equalsIgnoreCase("If-None-Match") &&
         server.header(i).indexOf(ETAG) >= 0) {
@@ -898,10 +778,10 @@ static void handle_settings_json(){
   String cc  = (g_country.length()==2? g_country:String("DK"));
   String j = String("{\"ap_ssid\":\"")+json_escape(apS)+"\",\"ap_pass\":\""+json_escape(apP)+
              "\",\"cc\":\""+json_escape(cc)+"\",\"theme\":\""+json_escape(g_theme)+
-             "\",\"base\":\""+json_escape(g_custom_base)+"\"}";
+             "\",\"base\":\""+json_escape(g_custom_base)+"\",\"ant_ext\":"+(g_ext_ant?"true":"false")+"}";
   send_json_nocache(j);
 }
-// Scan networks (returns bssid and filters out own AP)
+// Scan networks
 static void merge_scan(vector<ApRec>& out, bool passive, uint32_t dwell_ms){
   int n=WiFi.scanNetworks(false,true,passive,dwell_ms,0);
   for(int i=0;i<n;i++){
@@ -951,7 +831,7 @@ static bool parse_common_fields(){
   g_target_bssid = server.hasArg("bssid") ? server.arg("bssid") : String();
   return true;
 }
-// Settings save (robust: normal args + fallback plain body)
+// Settings save
 static void handle_save_settings(){
   bool got=false;
   if(server.hasArg("cc"))      { g_country     = server.arg("cc");      got=true; }
@@ -959,6 +839,7 @@ static void handle_save_settings(){
   if(server.hasArg("base"))    { g_custom_base = server.arg("base");    got=true; }
   if(server.hasArg("ap_ssid")) { g_ap_ssid     = server.arg("ap_ssid"); got=true; }
   if(server.hasArg("ap_pass")) { g_ap_pass     = server.arg("ap_pass"); got=true; }
+  if(server.hasArg("ant_ext")) { String v=server.arg("ant_ext"); g_ext_ant=(v=="1"||v=="true"||v=="on"); got=true; } // NEW
   if(!got && server.hasArg("plain")){
     String body=server.arg("plain"), v;
     if(form_get_kv(body,"cc",v))        { g_country=v; got=true; }
@@ -966,8 +847,9 @@ static void handle_save_settings(){
     if(form_get_kv(body,"base",v))      { g_custom_base=v; got=true; }
     if(form_get_kv(body,"ap_ssid",v))   { g_ap_ssid=v; got=true; }
     if(form_get_kv(body,"ap_pass",v))   { g_ap_pass=v; got=true; }
+    if(form_get_kv(body,"ant_ext",v))   { g_ext_ant=(v=="1"||v=="true"||v=="on"); got=true; } // NEW
   }
-  if(got) save_all_prefs(false,true);
+  if(got){ save_all_prefs(false,true); apply_antenna(); } // apply immediately
   send_html_nocache("<!DOCTYPE html><meta charset='utf-8'><title>Saved</title><body style='background:#000;color:#fff;font:16px system-ui'>Saved.</body>");
 }
 // Factory reset
@@ -993,12 +875,12 @@ static void handle_test(){
   begin_target();
   bool ok=wait_for_ip(WIFI_TEST_TIMEOUT_MS);
   if(!ok){
-    Serial.println("[TEST] FAILED: no IP");
+    Serial.println("[TEST] FAILED: no IP]");
     send_html_nocache(html_msg_page("Failed","Could not get IP.","<div class='row'><a class='btn' href='/'>Back</a></div>"));
     esp_wifi_disconnect();
     return;
   }
-  Serial.printf("[TEST] OK IP=%s\n",WiFi.localIP().toString().c_str());
+  Serial.printf("[TEST] OK ip=%s\n",WiFi.localIP().toString().c_str());
   const String warnHtml =
   String("<span class='w1'>Warning:</span><br><br>"
          "This program attempts to exhaust the DHCP address pool on the wireless network \"") + String(g_target_ssid) +
@@ -1069,6 +951,7 @@ void setup(){
   if(g_no_ls_lock) esp_pm_lock_acquire(g_no_ls_lock);
   esp_pm_config_t pm={}; pm.max_freq_mhz=160; pm.min_freq_mhz=160; pm.light_sleep_enable=false; esp_pm_configure(&pm);
   load_prefs();
+  apply_antenna(); // NEW: honor persisted antenna choice at boot
   const String ap_ssid=g_ap_ssid.length()?g_ap_ssid:String(DEF_AP_SSID);
   const String ap_pass=g_ap_pass.length()?g_ap_pass:String(DEF_AP_PASS);
   wifi_prepare(WIFI_AP, INITIAL_HOSTNAME);
@@ -1081,7 +964,7 @@ void setup(){
   dnsServer.setTTL(60);
   server.on("/", HTTP_GET, handle_root);
   server.on("/settings", HTTP_GET, handle_settings);
-  server.on("/about", HTTP_GET, handle_about);       // fallback if someone navigates directly
+  server.on("/about", HTTP_GET, handle_about);
   server.on("/test", HTTP_POST, handle_test);
   server.on("/activate", HTTP_POST, handle_activate);
   server.on("/scan.json", HTTP_GET, handle_scan_json);
