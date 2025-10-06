@@ -26,7 +26,7 @@ The starvation attack will keep running forever requesting new IP addresses ( un
 
 How to setup Arduino ?
 
-Download Arduino IDE here: https://www.arduino.cc/en/software/ [arduino](https://www.arduino.cc/en/software/){:target="_blank" rel="noopener"}
+Download Arduino IDE here: https://www.arduino.cc/en/software/ [arduino](https://www.arduino.cc/en/software/)
 
 Watch the video for how to ensure the esp32c6 can be selected as board to work with: 
 
