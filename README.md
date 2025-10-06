@@ -23,3 +23,11 @@ If it succeeds, you can start the test by pressing "Start".
 ![Start](https://github.com/keldnorman/dhcp-depleter/blob/main/images/start.png?raw=true)
 
 The starvation attack will keep running forever requesting new IP addresses ( until turned off or the battery is depleted).
+
+How to setup Arduino ?
+
+Download Arduino IDE here: https://www.arduino.cc/en/software/ [arduino](https://www.arduino.cc/en/software/).
+
+Watch the video for how to ensure the esp32c6 can be selected as board to work with: 
+
+[![Setup Arduino](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/images/setup-arduino.png)](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/film/setup-arduino.mp4)
