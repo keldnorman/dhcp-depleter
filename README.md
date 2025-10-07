@@ -28,15 +28,18 @@ How to setup Arduino ?
 
 Download Arduino IDE here: https://www.arduino.cc/en/software/ [arduino](https://www.arduino.cc/en/software/)
 
-See here how to use the program:
-
-[![How to test](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/images/how-to-test.png)](https://youtube.com/shorts/jGS-Ibb9VLU?feature=share)
-
 See here how the Leases are beingpulled / used:
 
 [![Pulling Leases](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/images/leases-being-used.png)](https://youtu.be/7uPJfRRhf8c)
+
+See here how to use the program:
+
+[![How to test](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/images/how-to-test.png)](https://youtube.com/shorts/jGS-Ibb9VLU?feature=share)
 
 Watch the video for how to ensure the esp32c6 can be selected as board to work with: 
 
 [![Setup Arduino](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/images/setup-arduino.png)](https://youtu.be/H0T0AxxFajg)
 
+The case for the mobile version without a battery can be found here: 
+
+[3d-print](https://makerworld.com/en/models/1723550-seeed-studio-xiao-esp32-c6-snap-fit-wall-mount#profileId-1829704)
