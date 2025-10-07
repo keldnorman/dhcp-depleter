@@ -40,7 +40,6 @@ Watch the video for how to ensure the esp32c6 can be selected as board to work w
 
 [![Setup Arduino](https://raw.githubusercontent.com/keldnorman/dhcp-depleter/main/images/setup-arduino.png)](https://youtu.be/H0T0AxxFajg)
 
-The case for the mobile version without a battery can be found here: 
+The case for the mobile version without a battery can be found here: [3D Printed Case](https://makerworld.com/en/models/1723550-seeed-studio-xiao-esp32-c6-snap-fit-wall-mount#profileId-1829704)
 
-[3D Printed Case](https://makerworld.com/en/models/1723550-seeed-studio-xiao-esp32-c6-snap-fit-wall-mount#profileId-1829704)
 ![Mobile Unit in case](https://github.com/keldnorman/dhcp-depleter/blob/main/images/mobile_small.png?raw=true) 
