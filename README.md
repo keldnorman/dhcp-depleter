@@ -1,7 +1,7 @@
 # dhcp-depleter
 Wireless DHCP IP Depletion Tester
 
-![Parts](https://github.com/keldnorman/dhcp-depleter/blob/main/images/parts.jpg?raw=true) ![Parts](https://github.com/keldnorman/dhcp-depleter/blob/main/images/mobile_small.png?raw=true) 
+![Parts](https://github.com/keldnorman/dhcp-depleter/blob/main/images/parts.jpg?raw=true)
 
 This C++ program, paired with an ESP32-C6, sets up a wireless access point you can join to run a DHCP-starvation test against a chosen SSID.
 Connect to the device’s Wi-Fi named “Sinkhole” with the passphrase 12345678 ( or scan the QR code with your phone).
@@ -42,4 +42,5 @@ Watch the video for how to ensure the esp32c6 can be selected as board to work w
 
 The case for the mobile version without a battery can be found here: 
 
-[3d-print](https://makerworld.com/en/models/1723550-seeed-studio-xiao-esp32-c6-snap-fit-wall-mount#profileId-1829704)
+[3D Printed Case](https://makerworld.com/en/models/1723550-seeed-studio-xiao-esp32-c6-snap-fit-wall-mount#profileId-1829704)
+![Mobile Unit in case](https://github.com/keldnorman/dhcp-depleter/blob/main/images/mobile_small.png?raw=true) 
